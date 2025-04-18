@@ -34,27 +34,32 @@ func (p *NormalizePattern) Normalize(q string) string {
 }
 
 var normalizePatterns = []NormalizePattern{
-	NormalizePattern{regexp.MustCompile(` +`), " "},
-	NormalizePattern{regexp.MustCompile(`[+\-]{0,1}\b\d+\b`), "N"},
-	NormalizePattern{regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`), "0xN"},
-	NormalizePattern{regexp.MustCompile(`(\\')`), ""},
-	NormalizePattern{regexp.MustCompile(`(\\")`), ""},
-	NormalizePattern{regexp.MustCompile(`'[^']+'`), "S"},
-	NormalizePattern{regexp.MustCompile(`"[^"]+"`), "S"},
-	NormalizePattern{regexp.MustCompile(`(([NS]\s*,\s*){4,})`), "..."},
+	{regexp.MustCompile(` +`), " "},
+	{regexp.MustCompile(`[+\-]?\b\d+\b`), "N"},
+	{regexp.MustCompile(`\b0x[0-9A-Fa-f]+\b`), "0xN"},
+	{regexp.MustCompile(`(\\')`), ""},
+	{regexp.MustCompile(`(\\")`), ""},
+	{regexp.MustCompile(`'[^']+'`), "S"},
+	{regexp.MustCompile(`"[^"]+"`), "S"},
+	{regexp.MustCompile(`(([NS]\s*,\s*){4,})`), "..."},
 }
 
 func processList(db *sql.DB) []string {
+	//goland:noinspection SqlNoDataSourceInspection
 	procList := "SHOW FULL PROCESSLIST"
 	rows, err := db.Query(procList)
 
-	queries := []string{}
+	var queries []string
 
 	if err != nil {
 		log.Println(err)
 		return queries
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Println("Error closing rows:", err)
+		}
+	}()
 
 	cs, err := rows.Columns()
 	if err != nil {
@@ -62,16 +67,16 @@ func processList(db *sql.DB) []string {
 	}
 	lcs := len(cs)
 	if lcs != 8 && lcs != 9 {
-		log.Fatal("Unknwon columns: ", cs)
+		log.Fatal("Unknown columns: ", cs)
 	}
 	for rows.Next() {
-		var user, host, db, command, state, info *string
-		var id, time int
+		var dbUser, host, db, command, state, info *string
+		var id, timeSec int
 		if lcs == 8 {
-			err = rows.Scan(&id, &user, &host, &db, &command, &time, &state, &info)
+			err = rows.Scan(&id, &dbUser, &host, &db, &command, &timeSec, &state, &info)
 		} else {
 			var progress interface{}
-			err = rows.Scan(&id, &user, &host, &db, &command, &time, &state, &info, &progress)
+			err = rows.Scan(&id, &dbUser, &host, &db, &command, &timeSec, &state, &info, &progress)
 		}
 		if err != nil {
 			log.Print(err)
@@ -125,7 +130,10 @@ func showSummary(w io.Writer, sum map[string]int64, n int) {
 		if i >= n {
 			break
 		}
-		fmt.Fprintf(w, "%4d %s\n", p.c, p.q)
+		_, err := fmt.Fprintf(w, "%4d %s\n", p.c, p.q)
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -191,8 +199,14 @@ func profile(db *sql.DB, cfg *Config) {
 		queries := processList(db)
 		if cfg.dump != nil {
 			for _, q := range queries {
-				cfg.dump.Write([]byte(q))
-				cfg.dump.Write([]byte{'\n'})
+				_, err := cfg.dump.Write([]byte(q))
+				if err != nil {
+					return
+				}
+				_, err2 := cfg.dump.Write([]byte{'\n'})
+				if err2 != nil {
+					return
+				}
 			}
 		}
 
@@ -216,12 +230,6 @@ func main() {
 	var host, dbuser, password, dumpfile string
 	var port int
 
-	currentUser, err := user.Current()
-	if err != nil {
-		dbuser = ""
-	} else {
-		dbuser = currentUser.Name
-	}
 	cfg := Config{}
 	flag.StringVar(&host, "host", "", "Host of database")
 	flag.StringVar(&dbuser, "user", "", "User")
@@ -237,15 +245,18 @@ func main() {
 
 	flag.Parse()
 
-	dsn := ""
+	// Initialize MySQL connection configuration
+	// First try to load from ~/.my.cnf if it exists
 	var config mysql_defaults_file.Config
 	if _, err := os.Stat(os.Getenv("HOME") + "/.my.cnf"); err == nil {
 		config = mysql_defaults_file.NewConfig("")
 	}
+
+	// Override with command line parameters if provided
 	if host != "" {
 		config.Host = host
 	}
-        if dbuser != "" {
+	if dbuser != "" {
 		config.User = dbuser
 	}
 	if password != "" {
@@ -254,13 +265,20 @@ func main() {
 	if port != 0 {
 		config.Port = uint16(port)
 	}
+
+	// Set defaults for required fields if not provided
 	if config.Host == "" {
 		config.Host = "localhost"
 	}
 	if config.User == "" {
-		config.User = dbuser
+		currentUser, err := user.Current()
+		if err == nil {
+			config.User = currentUser.Name
+		}
 	}
-	dsn = mysql_defaults_file.BuildDSN(config, "")		
+
+	// Build the DSN (Data Source Name) for MySQL connection
+	dsn := mysql_defaults_file.BuildDSN(config, "")
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		fmt.Println("dsn: ", dsn)
