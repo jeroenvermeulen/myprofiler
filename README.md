@@ -4,7 +4,15 @@ myprofiler is statistical profiler for MySQL.
 
 It watches `SHOW FULL PROCESSLIST` periodically, and count each query.
 
-## Install
+## Install Using Go
+
+```console
+export GOBIN=/usr/local/bin
+go install github.com/jeroenvermeulen/myprofiler@latest
+chmod 755 /usr/local/bin/myprofiler
+```
+
+## Install Release
 
 Download archive and put it on directory in your PATH.
 
