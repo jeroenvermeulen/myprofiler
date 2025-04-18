@@ -17,7 +17,7 @@ chmod 755 /usr/local/bin/myprofiler
 Download archive and put it on directory in your PATH.
 
 ```console
-wget https://github.com/KLab/myprofiler/releases/download/0.2/myprofiler.linux_amd64.tar.gz
+wget https://github.com/jeroenvermeulen/myprofiler/releases/download/v0.3.0/myprofiler.linux_amd64.tar.gz
 tar xf myprofiler.linux_amd64.tar.gz
 mv myprofiler ~/bin
 ```
