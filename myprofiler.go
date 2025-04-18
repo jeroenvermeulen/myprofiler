@@ -13,6 +13,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/sjmudd/mysql_defaults_file"
 )
 
 type Config struct {
@@ -222,10 +223,10 @@ func main() {
 		dbuser = currentUser.Name
 	}
 	cfg := Config{}
-	flag.StringVar(&host, "host", "localhost", "Host of database")
-	flag.StringVar(&dbuser, "user", dbuser, "User")
+	flag.StringVar(&host, "host", "", "Host of database")
+	flag.StringVar(&dbuser, "user", "", "User")
 	flag.StringVar(&password, "password", "", "Password")
-	flag.IntVar(&port, "port", 3306, "Port")
+	flag.IntVar(&port, "port", 0, "Port")
 
 	flag.StringVar(&dumpfile, "dump", "", "Write raw queries to this file")
 
@@ -236,7 +237,27 @@ func main() {
 
 	flag.Parse()
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/", dbuser, password, host, port)
+	dsn := ""
+	config := mysql_defaults_file.NewConfig("")
+	if host != "" {
+		config.Host = host
+	}
+        if dbuser != "" {
+		config.User = dbuser
+	}
+	if password != "" {
+		config.Password = password
+	}
+	if port != 0 {
+		config.Port = uint16(port)
+	}
+	if config.Host == "" {
+		config.Host = "localhost"
+	}
+	if config.User == "" {
+		config.User = dbuser
+	}
+	dsn = mysql_defaults_file.BuildDSN(config, "")		
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		fmt.Println("dsn: ", dsn)
