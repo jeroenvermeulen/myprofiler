@@ -261,6 +261,8 @@ func main() {
 	}
 	if password != "" {
 		config.Password = password
+	} else if os.Getenv("MYSQL_PWD") != "" {
+		config.Password = os.Getenv("MYSQL_PWD")
 	}
 	if port != 0 {
 		config.Port = uint16(port)
@@ -275,9 +277,6 @@ func main() {
 		if err == nil {
 			config.User = currentUser.Name
 		}
-	}
-	if config.Password == "" {
-		config.Password = os.Getenv("MYSQL_PWD")
 	}
 
 	// Build the DSN (Data Source Name) for MySQL connection
