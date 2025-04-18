@@ -238,7 +238,10 @@ func main() {
 	flag.Parse()
 
 	dsn := ""
-	config := mysql_defaults_file.NewConfig("")
+	var config mysql_defaults_file.Config
+	if _, err := os.Stat(os.Getenv("HOME") + "/.my.cnf"); err == nil {
+		config = mysql_defaults_file.NewConfig("")
+	}
 	if host != "" {
 		config.Host = host
 	}
